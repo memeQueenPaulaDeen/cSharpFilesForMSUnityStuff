@@ -62,6 +62,7 @@ public class ApplySegmentation : MonoBehaviour
 
     void ColorMapMesh()
     {
+        ArrayList childrenToRemoveNames = new ArrayList();
         
         int numKids = map.transform.childCount;
         for (int i = 1; i < numKids - 1; i++ )
@@ -103,13 +104,35 @@ public class ApplySegmentation : MonoBehaviour
                 }
 
                 
+            }else if (!c.activeSelf)
+            {
+                //Debug.Log("Derender? " + c.name);
+                children.Remove(c);
+                childrenToRemoveNames.Add(c.name + "(Clone)");
             }
         }
+         // trying to avoid concurrent mod
+         ArrayList toDestroy = new ArrayList();
+         numKids = map.transform.childCount;
+         for (int i = 1; i < numKids - 1; i++)
+         {
+             GameObject c = map.transform.GetChild(i).gameObject;
+             if (childrenToRemoveNames.Contains(c.name))
+             {
+                 toDestroy.Add(c);
+             }
+         }
+         
+         foreach (GameObject c in toDestroy)
+         {
+             c.Destroy();
+         }
+        
     }
 
     void doTheThing()
     {
-        Debug.Log("made it into event code");
+        //Debug.Log("made it into event code");
         
 
         // Find all GameObjects with Mesh Renderer and add a color variable to be
@@ -118,14 +141,14 @@ public class ApplySegmentation : MonoBehaviour
         var mpb = new MaterialPropertyBlock();
         foreach (var r in renderers)
         {
-            Debug.Log("Attempting " + r.name.ToString()); //.transform.tag.ToString());
+            //Debug.Log("Attempting " + r.name.ToString()); //.transform.tag.ToString());
             
             // mpb.SetColor("_SegmentColor", new Color32(0, 0, 255, 255));
             // r.SetPropertyBlock(mpb);
 
             if (segmentDict.TryGetValue(r.transform.tag, out Color32 outColor))
             {
-                Debug.Log("adding " + r.transform.tag.ToString() +" with " + outColor.ToString());
+                //Debug.Log("adding " + r.transform.tag.ToString() +" with " + outColor.ToString());
                 mpb.SetColor("_SegmentColor", outColor);
                 r.SetPropertyBlock(mpb);
             }
