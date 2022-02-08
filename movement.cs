@@ -1,10 +1,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 public class movement : MonoBehaviour
 {
 
+    public bool randAct = false;
+    public int changeEveryNframes = 10;
     public float speed = 12f;
     public CharacterController Controller;
     public float gravity = -9.81f;
@@ -17,7 +20,11 @@ public class movement : MonoBehaviour
 
     private Vector3 velocity;
     private bool isGrounded;
-   
+    private int frames = 0;
+    private float x;
+    private float z;
+    
+    
     // Update is called once per frame
     void Update()
     {
@@ -31,10 +38,28 @@ public class movement : MonoBehaviour
             velocity.y = -2f;
         }
 
-        float x = Input.GetAxis("Horizontal");
-        float z = Input.GetAxis("Vertical");
+        
+        
+        //Debug.Log("x is " + x.ToString());
+        Vector3 move;
 
-        Vector3 move = transform.right * x + transform.forward * z;
+        if (!randAct)
+        {
+            x = Input.GetAxis("Horizontal");
+            z = Input.GetAxis("Vertical");
+            move = transform.right * x + transform.forward * z;
+        }
+        else
+        {
+            if (frames % changeEveryNframes == 0)
+            {
+                x = Random.Range(-1f, 1f);
+                z = Random.Range(-1f, 1f);
+                frames = 0;
+            }
+            move = transform.right * x + transform.forward * z;
+            frames = frames + 1;
+        }
 
         Controller.Move(move * speed * Time.deltaTime);
 

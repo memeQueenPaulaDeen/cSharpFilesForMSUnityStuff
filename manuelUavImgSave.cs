@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using DefaultNamespace;
 using UnityEngine;
 
-public class getPlayerImageCoordinates : MonoBehaviour
+public class manuelUavImgSave : MonoBehaviour
 {
 
     public bool connectToServer = false;
-    public Transform playerLoc;
     private Camera cam;
     public int updateEveryNFrames = 10;
     private int frames;
@@ -36,8 +35,6 @@ public class getPlayerImageCoordinates : MonoBehaviour
             messenger = new TCPMessenger();
             Debug.Log("attepting to connect");
         }
-
-        playerOriginalPosition = playerLoc.position;
     }
 
     // Update is called once per frame
@@ -48,8 +45,6 @@ public class getPlayerImageCoordinates : MonoBehaviour
         if (frames % updateEveryNFrames == 0)
         {
             //NOTE: The BOTTOM-left of the screen is (0,0); the right-top is (pixelWidth,pixelHeight)
-            Vector3 pixelCoord = cam.WorldToScreenPoint(playerLoc.position);
-            pixelCoord = convertToOpenCVCord(pixelCoord);
             //Debug.Log(pixelCoord);
             //Debug.Log(cam.WorldToViewportPoint(playerLoc.position).ToString());
             
@@ -67,13 +62,9 @@ public class getPlayerImageCoordinates : MonoBehaviour
             
             if (connectToServer)
             {
-                messenger.sendLocMsg(pixelCoord.ToString());
+                
                 messenger.sendPicMsg(bytes);
-                bool reset = TCPMessenger.act.getReset();
-                if (reset)
-                {
-                    playerLoc.position = playerOriginalPosition;
-                }
+                
             }
 
 

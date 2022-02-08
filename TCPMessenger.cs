@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace DefaultNamespace
@@ -11,6 +12,68 @@ namespace DefaultNamespace
         private string serverAdress;
         private Int32 port;
         private TcpClient client;
+        public static action act;
+
+        public class action
+        {
+            private float heading;
+            private float force;
+            private bool reset;
+
+            public action()
+            {
+                heading = 0;
+                force = 0;
+                reset = false;
+            }
+
+            void setForce(float force)
+            {
+                this.force = force;
+            }
+            
+            void setHeading(float heading)
+            {
+                this.heading = heading;
+            }
+
+            public float getHeading()
+            {
+                return this.heading;
+            }
+
+            public float getForce()
+            {
+                return this.force;
+            }
+
+            public bool getReset()
+            {
+                return this.reset;
+            }
+
+            void setReset(bool r)
+            {
+                this.reset = r;
+            }
+
+            public void setAction(string Raw)
+            {
+                if (Raw == "reset")
+                {
+                    setReset(true);
+                }
+                else
+                {
+                    setReset(false);
+                    float[] myArray = JsonConvert.DeserializeObject<float[]>(Raw);
+                    setHeading(myArray[0]);
+                    setForce(myArray[1]);
+                }
+            }
+            
+
+        }
 
         public TCPMessenger()
         {
@@ -18,8 +81,13 @@ namespace DefaultNamespace
             port = 10000;
             client = new TcpClient(serverAdress, port);
             Debug.Log("conected???");
+            act = new action();
         }
 
+        // public action getAction()
+        // {
+        //     return act;
+        // }
 
         public void sendPicMsg(Byte[] msg)
         {
@@ -33,9 +101,15 @@ namespace DefaultNamespace
             String responseData = String.Empty;
             Int32 bytes = stream.Read(rdata, 0, rdata.Length);
             responseData = System.Text.Encoding.ASCII.GetString(rdata, 0, bytes);
-            Debug.Log(responseData);
-            
+            Debug.Log("action to take: " + responseData);
+
+            act.setAction(responseData);
             stream.Write(msg,0, msg.Length);
+            
+            rdata = new Byte[512];
+            bytes = stream.Read(rdata, 0, rdata.Length);
+            responseData = System.Text.Encoding.ASCII.GetString(rdata, 0, bytes);
+            Debug.Log(responseData);
             
         }
 
@@ -53,6 +127,11 @@ namespace DefaultNamespace
             
             Byte[] data = System.Text.Encoding.ASCII.GetBytes(msg);
             stream.Write(data, 0, data.Length);
+            
+            rdata = new Byte[512];
+            bytes = stream.Read(rdata, 0, rdata.Length);
+            responseData = System.Text.Encoding.ASCII.GetString(rdata, 0, bytes);
+            Debug.Log(responseData);
             
         }
 
