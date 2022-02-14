@@ -1,10 +1,13 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using Mapbox.Map;
 using Mapbox.Unity.Map;
 using Mapbox.Unity.MeshGeneration.Data;
 using Mapbox.Unity.MeshGeneration.Modifiers;
 using UnityEditor.UIElements;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 public class ApplySegmentation : MonoBehaviour
 {
@@ -14,6 +17,7 @@ public class ApplySegmentation : MonoBehaviour
     public AbstractMap map;
     public MaterialModifier mod;
     public LayerModifier LayerModifierForBG;
+    public int updateEveryXframes = 20;
     
     Dictionary<string, Color32> segmentDict = new Dictionary<string, Color32>();
     
@@ -45,14 +49,15 @@ public class ApplySegmentation : MonoBehaviour
 
         if (ready)// && ! done)
         {
-            count = count + 1;
             
-            if (count % 100 == 0)
+            
+            if (count % updateEveryXframes == 0)
             {
                 doTheThing();
                 //map.Terrain.AddToUnityLayer(8);
                 count = 0;
             }
+            count = count + 1;
 
             // doTheThing();
             // done = true;
@@ -65,7 +70,7 @@ public class ApplySegmentation : MonoBehaviour
         ArrayList childrenToRemoveNames = new ArrayList();
         
         int numKids = map.transform.childCount;
-        for (int i = 1; i < numKids - 1; i++ )
+        for (int i = 1; i < numKids; i++ )
         {
             GameObject c = map.transform.GetChild(i).gameObject;
             if (c.activeSelf && !c.name.Contains("Clone")) // dont clone the clones only dup og
@@ -76,10 +81,58 @@ public class ApplySegmentation : MonoBehaviour
 
 
 
-                if (!children.Contains(c))
+                if (!children.Contains(c.name) )
                 {
-                    children.Add(c);
-                    GameObject cloned = Object.Instantiate(c, map.transform);
+                    children.Add(c.name);
+
+                    GameObject cloned = Object.Instantiate(map.transform.GetChild(i).gameObject, map.transform);
+                    UnityTile tile = cloned.GetComponent<UnityTile>();;
+
+                    UnityTile satTile = c.GetComponent<UnityTile>();//
+                    Texture2D rd = satTile.GetRasterData();
+                    if (rd == null)
+                    {
+                        Debug.Log("null tile " + tile.name);
+                    }
+
+                    Texture2D temp = new Texture2D(rd.width,rd.height,rd.format,rd.mipmapCount,true);
+                    Graphics.CopyTexture(rd, temp);
+                    
+                    //copy over the orginal satilite texture
+                    satTile.MeshRenderer.sharedMaterial.mainTexture = temp;
+                    
+                    //also need to copy the texture fo the kids
+                    int numSatTileKids = satTile.transform.childCount;
+                    for (int k = 0; k < numSatTileKids;k++)
+                    {
+                        
+                        
+                        GameObject satChild = satTile.transform.GetChild(k).gameObject;
+                        if (satChild.name == "building")
+                        {
+                            MeshRenderer smr = satChild.GetComponent<MeshRenderer>();
+                            Material[] mats = smr.sharedMaterials;
+                            foreach (var mat in mats)
+                            {
+                                Texture srd = mat.mainTexture;
+                                
+                                if (mat.name.Contains("Satellite")){
+                                    Texture2D stemp = new Texture2D(srd.width,srd.height,rd.format,srd.mipmapCount,true);
+                                    Graphics.CopyTexture(srd, stemp);
+                                    smr.sharedMaterial.mainTexture = stemp;       
+                                }
+
+                                 
+                            }
+                            
+                            
+                        }
+                    }
+                    
+                    
+                    
+                    //tile.Destroy();
+                    
                     MeshFilter mf = cloned.GetComponent<MeshFilter>();
                     MeshRenderer r = cloned.GetComponent<MeshRenderer>();
                     VectorEntity ve = new VectorEntity()
@@ -90,7 +143,7 @@ public class ApplySegmentation : MonoBehaviour
                         MeshRenderer = r,
                         Mesh = mf.sharedMesh
                     };
-                    UnityTile tile = cloned.GetComponent<UnityTile>();
+                    
                     
                     mod.Run(ve, tile);
                     LayerModifierForBG.Run(ve,tile);
@@ -99,35 +152,78 @@ public class ApplySegmentation : MonoBehaviour
                     segmentDict.TryGetValue("map", out Color32 outColor);
                     mpb.SetColor("_SegmentColor", outColor);
                     r.SetPropertyBlock(mpb);
-                    //r1.SetPropertyBlock(mpb);
+                    
+                    
                     
                 }
 
                 
-            }else if (!c.activeSelf)
+            }
+            
+        }
+
+        ArrayList activeNonClones = new ArrayList();
+        List<GameObject> toDestroy = new List<GameObject>();
+        numKids = map.transform.childCount;
+        
+        for (int i = 1; i < numKids - 1; i++)
+        {
+            string name = map.transform.GetChild(i).gameObject.name;
+            if (!name.Contains("Clone"))
             {
-                //Debug.Log("Derender? " + c.name);
-                children.Remove(c);
-                childrenToRemoveNames.Add(c.name + "(Clone)");
+                activeNonClones.Add(name);
             }
         }
+        
          // trying to avoid concurrent mod
-         ArrayList toDestroy = new ArrayList();
-         numKids = map.transform.childCount;
+        
          for (int i = 1; i < numKids - 1; i++)
          {
              GameObject c = map.transform.GetChild(i).gameObject;
-             if (childrenToRemoveNames.Contains(c.name))
+             if (c.name.Contains("Clone"))
              {
-                 toDestroy.Add(c);
+                 string cloneName = c.name.Split('(')[0];
+                 if (!activeNonClones.Contains(cloneName))
+                 {
+                     toDestroy.Add(c);
+                     children.Remove(cloneName);
+                 }
              }
          }
-         
+
+         //avoiding destriction of recent tiles seems to greatly allevate the blank tile issue.
+         int size = toDestroy.Count;
+         while (size > 53)//large prime number?
+         {
+             var c = toDestroy[0];
+             c.SetActive(false);
+             c.Destroy();
+             toDestroy.RemoveAt(0);
+             size = toDestroy.Count;
+         }
+
+
          foreach (GameObject c in toDestroy)
          {
-             c.Destroy();
+             c.SetActive(false);
+             // string cloneName = c.name.Split('(')[0];
+             // int x =  Int32.Parse(cloneName.Split('/')[1]);
+             // int y =  Int32.Parse(cloneName.Split('/')[2]);
+             // int z =  Int32.Parse(cloneName.Split('/')[0]);
+             //
+             //c.Destroy();
+             //map.MapVisualizer.DisposeTile(new UnwrappedTileId(z,x,y));
          }
-        
+
+         //just giving up at this point and trying to brute force mange the old tiles
+         // if ((AutoCapture.rasterLengthRight + 1) * AutoCapture.rasterLengthUp == AutoCapture.poseIdx)
+         // {
+         //     foreach (GameObject c in toDestroy)
+         //     {
+         //         c.Destroy();
+         //     }
+         // }
+
     }
 
     void doTheThing()

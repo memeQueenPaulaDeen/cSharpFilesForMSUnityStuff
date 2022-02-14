@@ -38,7 +38,11 @@ public class setHeightAboveMap : MonoBehaviour
     private bool done = false;
     private bool ready = false;
 
-    
+    public bool getDone()
+    {
+        return done;
+    }
+
     void LateUpdate()
     {
 
