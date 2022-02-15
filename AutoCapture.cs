@@ -163,7 +163,7 @@ public class AutoCapture : MonoBehaviour
         
         if (takeScreenShot)
         {
-            string fname = currentLocationName+poseIdx.ToString() + ".png";
+            string fname = currentLocationName + "_" +poseIdx.ToString() + ".png";
 
             string xpath = System.IO.Path.Combine(dataFolder, "x");
             string ypath = System.IO.Path.Combine(dataFolder, "y");
