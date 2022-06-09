@@ -6,6 +6,8 @@ using Mapbox.Examples;
 using Mapbox.Unity.Map;
 using Mapbox.Utils;
 using UnityEngine;
+using DefaultNamespace;
+
 
 
 public class AutoCapture : MonoBehaviour
@@ -25,6 +27,12 @@ public class AutoCapture : MonoBehaviour
     public int rasterLengthUp = 2;
 
     public String dataFolder;
+    public bool isTrainMode = true;
+    public bool doFullAutoTest;
+    public bool randomRotAug = false;
+    public bool manOverRideRaster = false;
+    
+    public static bool fullAutoTest;
     
     
     
@@ -37,20 +45,50 @@ public class AutoCapture : MonoBehaviour
     private List<Vector3> rasterPoseList;
     public static int poseIdx = 0;
     private int cityLocIdx = 0;
-    private string currentLocationName; 
-    
-    
-    
-    
+    private string currentLocationName;
+    public static TCPMessenger messenger;
+
+    private GameObject player;
+
+    private Quaternion initRot;
+
     void Start()
-    { 
-        currentLocationName = locations[cityLocIdx].Item1;
-        map.SetCenterLatitudeLongitude(locations[cityLocIdx].Item2);
+    {
+        initRot = rgbCam.transform.rotation;
+        fullAutoTest = doFullAutoTest;
+        if (isTrainMode)
+        {
+            currentLocationName = locations[cityLocIdx].Item1;
+            map.SetCenterLatitudeLongitude(locations[cityLocIdx].Item2);
+        }
+        else
+        {
+            currentLocationName = "test";
+            if (fullAutoTest)
+            {
+                player = GameObject.Find("player");
+                player.SetActive(false);
+                GameObject.Find("Main Camera").GetComponent<sendMainCamToPython>().enabled = false;
+                GameObject.Find("Main Camera").GetComponent<uavCamFollow>().enabled = false;
+                
+                messenger = new TCPMessenger();
+                Debug.Log("attepting to connect");
+            }
+        }
+
+        if (manOverRideRaster)
+        {
+            changePositionEveryXframes = 1;
+        }
     }
     
 
     
-
+    static float nextFloat(float min, float max){
+        System.Random random = new System.Random();
+        double val = (random.NextDouble() * (max - min) + min);
+        return (float)val;
+    }
 
     private void Update()
     {
@@ -75,44 +113,33 @@ public class AutoCapture : MonoBehaviour
                 }
                 //check if there is still part of the raster to do
                 //maybe worth refactoring the rastering to a class
-                if (poseIdx < rasterPoseList.Count)
+
+                if (randomRotAug)
                 {
-                    rgbCam.transform.position = rgbCam.transform.position + rasterPoseList[poseIdx];
-                    //Also want to add logic for saving pic and its seg map
-                    
-                    poseIdx = poseIdx + 1;
-                    takeScreenShot = true;
+                    rgbCam.transform.rotation = initRot;
+                    rgbCam.transform.Rotate(0f,0f,nextFloat(-30f,30f));
+                    //rgbCam.transform.Rotate(nextFloat(-2f,2f),nextFloat(-2f,2f),nextFloat(-2f,2f));
                 }
-                else if (cityLocIdx < locations.Count-1)
+
+                if (isTrainMode)
                 {
-                    poseIdx = 0;
-                    cityLocIdx++;
-                    
-                    currentLocationName = locations[cityLocIdx].Item1;
-
-                    
-                    // map.SetCenterLatitudeLongitude(locations[cityLocIdx].Item2);
-                    // ReloadMap r = new ReloadMap();
-
-                    int numKids = map.transform.childCount;
-                    
-                    //map.MapVisualizer.ClearMap();
-                    // for (int i = 1; i < numKids - 1; i++)
-                    // {
-                    //     
-                    //     GameObject c = map.transform.GetChild(i).gameObject;
-                    //     if (c.name.Contains("Clone"))
-                    //     {
-                    //         c.SetActive(false);
-                    //         c.Destroy();
-                    //     }
-                    //     
-                    // }
-                    
-
-                    map.UpdateMap(locations[cityLocIdx].Item2,18);
-                    rgbCam.transform.position = new Vector3(0, rgbCam.transform.position.y, 0);
+                    uavCamTrainMode();
                 }
+                else
+                {
+                    if (manOverRideRaster)
+                    {
+                        uavCamTestModeManOverRide();
+                    }
+                    else
+                    {
+                        uavCamTestModeGatherGlobal();
+                    }
+
+                    // uavCamTestModeGatherGlobal();
+                }
+
+
 
                 //next step is to add logic to jump the map to a new location all together
                 //then repeat raster
@@ -128,8 +155,66 @@ public class AutoCapture : MonoBehaviour
         }
 
     }
-    
-    
+
+
+    //simple save for now eventually will send over socket 
+    private void uavCamTestModeGatherGlobal()
+    {
+        if (poseIdx < rasterPoseList.Count)
+        {
+            rgbCam.transform.position = rgbCam.transform.position + rasterPoseList[poseIdx];
+            //Also want to add logic for saving pic and its seg map
+                    
+            poseIdx = poseIdx + 1;
+            takeScreenShot = true;
+        }
+        else
+        {
+            Debug.Log("all images captured");
+            if (fullAutoTest)
+            {
+                Debug.Log("Begin Navigation phase");
+                
+                player.SetActive(true);
+                GameObject.Find("Main Camera").GetComponent<uavCamFollow>().enabled = true;
+                GameObject.Find("Main Camera").GetComponent<sendMainCamToPython>().enabled = true;
+
+                //Stop the random rotation durring template matching 
+                randomRotAug = false;
+
+
+
+            }
+        }
+    }
+
+    private void uavCamTrainMode()
+    {
+        if (poseIdx < rasterPoseList.Count)
+        {
+            rgbCam.transform.position = rgbCam.transform.position + rasterPoseList[poseIdx];
+            //Also want to add logic for saving pic and its seg map
+                    
+            poseIdx = poseIdx + 1;
+            takeScreenShot = true;
+        }
+        else if (cityLocIdx < locations.Count-1)
+        {
+            poseIdx = 0;
+            cityLocIdx++;
+                    
+            currentLocationName = locations[cityLocIdx].Item1;
+
+                    
+            // map.SetCenterLatitudeLongitude(locations[cityLocIdx].Item2);
+            // ReloadMap r = new ReloadMap();
+
+            int numKids = map.transform.childCount;
+            map.UpdateMap(locations[cityLocIdx].Item2,18);
+            rgbCam.transform.position = new Vector3(0, rgbCam.transform.position.y, 0);
+        }
+    }
+
     private List<Vector3> raster()
     {
         List<Vector3> result = new List<Vector3>(rasterLengthUp*rasterLengthRight);
@@ -154,6 +239,8 @@ public class AutoCapture : MonoBehaviour
             result.Add(Delta);
         }
 
+        // stop the last move up from happening
+        result.RemoveAt(result.Count-1);
         return result;
     }
     
@@ -168,8 +255,25 @@ public class AutoCapture : MonoBehaviour
             string xpath = System.IO.Path.Combine(dataFolder, "x");
             string ypath = System.IO.Path.Combine(dataFolder, "y");
             
-            screenShot(rgbCam,xpath,fname);
-            screenShot(segCam,ypath,fname);
+            if(isTrainMode || !fullAutoTest){
+                screenShot(rgbCam,xpath,fname);
+                screenShot(segCam,ypath,fname);
+            }
+            else
+            {
+                RenderTexture rt = new RenderTexture(camResWidth, camResHeight, 24);
+                rgbCam.targetTexture = rt;
+                Texture2D screenShot = new Texture2D(camResWidth, camResHeight, TextureFormat.RGB24, false);
+                rgbCam.Render();
+                RenderTexture.active = rt;
+                screenShot.ReadPixels(new Rect(0, 0, camResWidth, camResHeight), 0, 0);
+                rgbCam.targetTexture = null;
+                RenderTexture.active = null; // JC: added to avoid errors
+                Destroy(rt);
+                byte[] bytes = screenShot.EncodeToPNG();
+                
+                messenger.sendPicStitchMsg(bytes);
+            }
 
             takeScreenShot = false;
         }
@@ -193,6 +297,40 @@ public class AutoCapture : MonoBehaviour
         Debug.Log(string.Format("Took screenshot to: {0}", fullPath));
     }
 
+    private void uavCamTestModeManOverRide()
+    {
+        if (Input.GetKeyDown("q"))
+        {
+            Debug.Log("all images captured");
+            if (fullAutoTest)
+            {
+                Debug.Log("Begin Navigation phase");
+                
+                player.SetActive(true);
+                GameObject.Find("Main Camera").GetComponent<uavCamFollow>().enabled = true;
+                GameObject.Find("Main Camera").GetComponent<sendMainCamToPython>().enabled = true;
+
+                //Stop the random rotation durring template matching 
+                randomRotAug = false;
+                
+            }
+        }
+        else
+        {
+            
+            // rgbCam.transform.position = rgbCam.transform.position + rasterPoseList[poseIdx];
+            // //Also want to add logic for saving pic and its seg map
+            //         
+            // poseIdx = poseIdx + 1;
+            if (Input.GetKeyDown("space"))
+            {
+                
+                takeScreenShot = true;
+                poseIdx = poseIdx + 1;
+            }
+
+        }
+    }
 
     private static List<Tuple<string, Vector2d>> locations = new List<Tuple<string, Vector2d>>
     {
@@ -285,7 +423,7 @@ public class AutoCapture : MonoBehaviour
         new Tuple<string, Vector2d>("Miyazaki", new Vector2d(31.8811875,131.423011)),
         new Tuple<string, Vector2d>("Akita", new Vector2d(39.7133785,140.105653)),
         new Tuple<string, Vector2d>("Dublin", new Vector2d(53.3458952,-6.262388)),
-        new Tuple<string, Vector2d>("İstanbul", new Vector2d(41.0083371,28.96173)),
+        new Tuple<string, Vector2d>("Istanbul", new Vector2d(41.0083371,28.96173)),
         new Tuple<string, Vector2d>("Pyongyang", new Vector2d(39.0093386,125.72667)),
         new Tuple<string, Vector2d>("Casablanca", new Vector2d(33.5508845,-7.6061484)),
         new Tuple<string, Vector2d>("Catania", new Vector2d(37.4962079,15.08425)),

@@ -32,7 +32,10 @@ public class ApplySegmentation : MonoBehaviour
          segmentDict.Add("Road", new Color32(45, 45, 45, 255));
          segmentDict.Add("Parking", new Color32(255, 90, 0, 255));
          segmentDict.Add("nonFloodWater", new Color32(0, 0, 255, 255));
-         segmentDict.Add("FloodWater", new Color32(114, 93, 71, 255));
+         //Warning flood water color actually seems to be set by the material props in unity
+         //This should match the value set in the unity editor now. 111, 63, 12 on 2/16/2022
+         segmentDict.Add("FloodWater", new Color32(111, 63, 12, 255));
+         //segmentDict.Add("FloodWater", new Color32(114, 93, 71, 255));
          segmentDict.Add("map", new Color32(255, 255, 0, 255));
          
     }
