@@ -4,10 +4,12 @@ using System.Collections.Generic;
 using Mapbox.Map;
 using Mapbox.Unity.Map;
 using Mapbox.Unity.MeshGeneration.Data;
+using Mapbox.Unity.MeshGeneration.Factories;
 using Mapbox.Unity.MeshGeneration.Modifiers;
 using UnityEditor.UIElements;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using TerrainLayer = Mapbox.Unity.Map.TerrainLayer;
 
 public class ApplySegmentation : MonoBehaviour
 {
@@ -24,9 +26,12 @@ public class ApplySegmentation : MonoBehaviour
 
     private System.Action mapInitEvent;
     private ArrayList children = new ArrayList();
+
+    private TerrainFactoryBase tf = null;//will copy in terrain factory
     void Start()
     {
          //map.OnInitialized += doTheThing;
+         
          
          segmentDict.Add("Building", new Color32(255, 0, 0, 255));
          segmentDict.Add("Road", new Color32(45, 45, 45, 255));
@@ -47,7 +52,7 @@ public class ApplySegmentation : MonoBehaviour
     {
         if (!ready)
         {
-            ready = map != null;
+            ready = map != null; // wait for map to initialize
         }
 
         if (ready)// && ! done)
@@ -56,7 +61,8 @@ public class ApplySegmentation : MonoBehaviour
             
             if (count % updateEveryXframes == 0)
             {
-                doTheThing();
+                // playing();
+                applySegCamShader();
                 //map.Terrain.AddToUnityLayer(8);
                 count = 0;
             }
@@ -68,11 +74,38 @@ public class ApplySegmentation : MonoBehaviour
     }
 
 
-    void ColorMapMesh()
+
+    private static bool findTerrainFactory(AbstractTileFactory fact)
+    {
+        return fact is TerrainFactoryBase;
+    }
+
+    // void playing()//copy terrain factory and set clone in map layer apply coloring to map layer
+    // {
+    //     if (tf == null)//first time in need to copy the terrainFactory
+    //     {
+    //         Predicate<AbstractTileFactory> pred = findTerrainFactory;
+    //         tf = (TerrainFactoryBase) map.MapVisualizer.Factories[map.MapVisualizer.Factories.FindIndex(pred)];
+    //         TerrainFactoryBase tfClone = Object.Instantiate(tf);
+    //
+    //         tf.Properties.unityLayerOptions.layerId = 8;//map layer id is 8
+    //         // tfClone.Properties.unityLayerOptions.layerId = 8;//map layer id is 8
+    //         map.MapVisualizer.Factories.Add(tf);
+    //
+    //     }
+    //
+    // }
+
+
+    //this has become much more complicated than intended and there is probably a better way
+    //Map box generates a mesh object based on elevation data to simulate terain
+    //This layer is not labeled or filterable and so the tag and layer modifiers are not straightforward to use
+    //THis method attempts to create copies of all the tiles and put them in a layer only visable to the segmenation camera
+    void ColorMapMesh() 
     {
         ArrayList childrenToRemoveNames = new ArrayList();
         
-        int numKids = map.transform.childCount;
+        int numKids = map.transform.childCount; //track the number of tiles in the map
         for (int i = 1; i < numKids; i++ )
         {
             GameObject c = map.transform.GetChild(i).gameObject;
@@ -84,7 +117,7 @@ public class ApplySegmentation : MonoBehaviour
 
 
 
-                if (!children.Contains(c.name) )
+                if (!children.Contains(c.name) )//there is a new tile rendered need to clone
                 {
                     children.Add(c.name);
 
@@ -229,7 +262,7 @@ public class ApplySegmentation : MonoBehaviour
 
     }
 
-    void doTheThing()
+    void applySegCamShader()
     {
         //Debug.Log("made it into event code");
         

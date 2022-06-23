@@ -30,6 +30,7 @@ public class sendMainCamToPython : MonoBehaviour
         cam = Camera.main;
         frames = 0;
         
+        //to set in unity editor game view resolution use plus sign to add a fixed res
         Screen.SetResolution(camResWidth, camResHeight, FullScreenMode.Windowed);
         
         if (connectToServer)
@@ -38,7 +39,7 @@ public class sendMainCamToPython : MonoBehaviour
             {
                 messenger = AutoCapture.messenger;
             }
-            else
+            else // just send the RGB cam to python 
             {
                 messenger = new TCPMessenger();
                 Debug.Log("attepting to connect");    

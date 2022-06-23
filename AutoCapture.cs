@@ -56,21 +56,22 @@ public class AutoCapture : MonoBehaviour
     {
         initRot = rgbCam.transform.rotation;
         fullAutoTest = doFullAutoTest;
-        if (isTrainMode)
+        if (isTrainMode)//collect and save images to train CNN
         {
-            currentLocationName = locations[cityLocIdx].Item1;
-            map.SetCenterLatitudeLongitude(locations[cityLocIdx].Item2);
+            //all training locations found at bottom of file can add and remove as needed
+            currentLocationName = locations[cityLocIdx].Item1; //the string name of the city is prepended to the file name
+            map.SetCenterLatitudeLongitude(locations[cityLocIdx].Item2); // set the lat long for the map 
         }
-        else
+        else //run the testing mode first step is to collect a panorama over the effected area
         {
             currentLocationName = "test";
             if (fullAutoTest)
             {
+                //dont need to render player during pano collection
                 player = GameObject.Find("player");
-                player.SetActive(false);
-                GameObject.Find("Main Camera").GetComponent<sendMainCamToPython>().enabled = false;
-                GameObject.Find("Main Camera").GetComponent<uavCamFollow>().enabled = false;
-                
+                player.SetActive(false); //when active script on player will force cam to directly overhead
+                GameObject.Find("Main Camera").GetComponent<sendMainCamToPython>().enabled = false;//send main cam to python streams at fixed frame rate. Instead we want to capture once per unique pose.
+                GameObject.Find("Main Camera").GetComponent<uavCamFollow>().enabled = false; //when active script on player will force cam to directly overhead
                 messenger = new TCPMessenger();
                 Debug.Log("attepting to connect");
             }
@@ -78,13 +79,13 @@ public class AutoCapture : MonoBehaviour
 
         if (manOverRideRaster)
         {
-            changePositionEveryXframes = 1;
+            changePositionEveryXframes = 1;// allow manual flight to be most responsive
         }
     }
     
 
     
-    static float nextFloat(float min, float max){
+    static float nextFloat(float min, float max){//get a random float in the range
         System.Random random = new System.Random();
         double val = (random.NextDouble() * (max - min) + min);
         return (float)val;
@@ -92,12 +93,12 @@ public class AutoCapture : MonoBehaviour
 
     private void Update()
     {
-        if (!ready)
+        if (!ready)//need to wait for map to init
         {
             ready = map != null;
         }
 
-        if (ready)
+        if (ready) //once map has init can begin either gather training images or test nav
         {
             //Dont move this updates 1 frame behind all others?
             count = count + 1;
@@ -114,7 +115,7 @@ public class AutoCapture : MonoBehaviour
                 //check if there is still part of the raster to do
                 //maybe worth refactoring the rastering to a class
 
-                if (randomRotAug)
+                if (randomRotAug) //can apply a random rotation to simulate pitch and roll. Need gimbal to avoid homogaphy plane assumption
                 {
                     rgbCam.transform.rotation = initRot;
                     rgbCam.transform.Rotate(0f,0f,nextFloat(-30f,30f));
@@ -157,7 +158,6 @@ public class AutoCapture : MonoBehaviour
     }
 
 
-    //simple save for now eventually will send over socket 
     private void uavCamTestModeGatherGlobal()
     {
         if (poseIdx < rasterPoseList.Count)
@@ -190,38 +190,38 @@ public class AutoCapture : MonoBehaviour
 
     private void uavCamTrainMode()
     {
-        if (poseIdx < rasterPoseList.Count)
+        if (poseIdx < rasterPoseList.Count) //still more locations at this area to consume
         {
             rgbCam.transform.position = rgbCam.transform.position + rasterPoseList[poseIdx];
             //Also want to add logic for saving pic and its seg map
                     
             poseIdx = poseIdx + 1;
-            takeScreenShot = true;
+            takeScreenShot = true; //indicate time to capture training pair and save to disk after screen renders [in late update funciton]
         }
-        else if (cityLocIdx < locations.Count-1)
+        else if (cityLocIdx < locations.Count-1) //move to the next city area and restart raster
         {
-            poseIdx = 0;
-            cityLocIdx++;
+            poseIdx = 0; //restart raster
+            cityLocIdx++; //move to next city area
                     
-            currentLocationName = locations[cityLocIdx].Item1;
+            currentLocationName = locations[cityLocIdx].Item1; //update prefix
 
                     
             // map.SetCenterLatitudeLongitude(locations[cityLocIdx].Item2);
             // ReloadMap r = new ReloadMap();
 
             int numKids = map.transform.childCount;
-            map.UpdateMap(locations[cityLocIdx].Item2,18);
+            map.UpdateMap(locations[cityLocIdx].Item2,18); //sets new loc in mapbox
             rgbCam.transform.position = new Vector3(0, rgbCam.transform.position.y, 0);
         }
     }
 
-    private List<Vector3> raster()
+    private List<Vector3> raster() //fly the raster patern
     {
         List<Vector3> result = new List<Vector3>(rasterLengthUp*rasterLengthRight);
         Vector3 Delta;
         for (int j = 0; j < rasterLengthUp; j++)
         {
-            for (int i = 0; i < rasterLengthRight; i++)
+            for (int i = 0; i < rasterLengthRight; i++) //move left to right then up then right to left and repeat
             {
                 if (j % 2 == 0)
                 {
@@ -245,21 +245,24 @@ public class AutoCapture : MonoBehaviour
     }
     
     
-    
+    //this is where images are either sent to python durring the stitching phase of testing 
+    // or where the training images are saved to the disk
     void LateUpdate() {
         
-        if (takeScreenShot)
+        if (takeScreenShot) //UAV is in position and ready to capture a training pair ar send an image to be stitched
         {
-            string fname = currentLocationName + "_" +poseIdx.ToString() + ".png";
+            string fname = currentLocationName + "_" +poseIdx.ToString() + ".png"; //create unique name for each image
 
-            string xpath = System.IO.Path.Combine(dataFolder, "x");
-            string ypath = System.IO.Path.Combine(dataFolder, "y");
+            //images and masks are saved with the same name to corresponing folders
+            //tulsa_1.png in folder x will have a mask saved called tulsa_1.png in folder y
+            string xpath = System.IO.Path.Combine(dataFolder, "x"); //save x image to disk
+            string ypath = System.IO.Path.Combine(dataFolder, "y"); //save seg mask to disk
             
-            if(isTrainMode || !fullAutoTest){
+            if(isTrainMode || !fullAutoTest){ //default to save the images if nothing is checked or save images if train mode is checked
                 screenShot(rgbCam,xpath,fname);
                 screenShot(segCam,ypath,fname);
             }
-            else
+            else // case where only do full auto test is checked under autocap in editor fly the raster pattern and send to python for stitching phase of nav test
             {
                 RenderTexture rt = new RenderTexture(camResWidth, camResHeight, 24);
                 rgbCam.targetTexture = rt;
@@ -297,7 +300,7 @@ public class AutoCapture : MonoBehaviour
         Debug.Log(string.Format("Took screenshot to: {0}", fullPath));
     }
 
-    private void uavCamTestModeManOverRide()
+    private void uavCamTestModeManOverRide() //rather than fly rastern patern control the uav manually durring the nav test
     {
         if (Input.GetKeyDown("q"))
         {
@@ -332,6 +335,7 @@ public class AutoCapture : MonoBehaviour
         }
     }
 
+    // list of all locations where training data was gathered
     private static List<Tuple<string, Vector2d>> locations = new List<Tuple<string, Vector2d>>
     {
         
